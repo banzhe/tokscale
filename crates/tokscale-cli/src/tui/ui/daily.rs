@@ -138,14 +138,13 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
                 ]
             } else {
                 vec![
-                    Cell::from(day.date.format("%Y-%m-%d").to_string())
-                        .style(if is_today {
-                            Style::default()
-                                .fg(Color::Yellow)
-                                .add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default().add_modifier(Modifier::BOLD)
-                        }),
+                    Cell::from(day.date.format("%Y-%m-%d").to_string()).style(if is_today {
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().add_modifier(Modifier::BOLD)
+                    }),
                     Cell::from(format_tokens(day.tokens.input))
                         .style(Style::default().fg(Color::Rgb(100, 200, 100))),
                     Cell::from(format_tokens(day.tokens.output))
