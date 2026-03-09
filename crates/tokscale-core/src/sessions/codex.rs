@@ -60,13 +60,14 @@ struct CodexTotals {
 impl CodexTotals {
     fn from_usage(usage: &CodexTokenUsage) -> Self {
         Self {
-            input: usage.input_tokens.unwrap_or(0),
-            output: usage.output_tokens.unwrap_or(0),
+            input: usage.input_tokens.unwrap_or(0).max(0),
+            output: usage.output_tokens.unwrap_or(0).max(0),
             cached: usage
                 .cached_input_tokens
                 .or(usage.cache_read_input_tokens)
-                .unwrap_or(0),
-            reasoning: usage.reasoning_output_tokens.unwrap_or(0),
+                .unwrap_or(0)
+                .max(0),
+            reasoning: usage.reasoning_output_tokens.unwrap_or(0).max(0),
         }
     }
 
@@ -484,6 +485,28 @@ mod tests {
         let line1 = r#"{"timestamp":"2026-01-01T00:00:00Z","type":"turn_context","payload":{"model":"gpt-5.2"}}"#;
         let line2 = r#"{"timestamp":"2026-01-01T00:00:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5},"last_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5}}}}"#;
         let line3 = r#"{"timestamp":"2026-01-01T00:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1}}}}"#;
+        let line4 = r#"{"timestamp":"2026-01-01T00:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":110,"cached_input_tokens":22,"output_tokens":33,"reasoning_output_tokens":6},"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1}}}}"#;
+        let content = format!("{}\n{}\n{}\n{}", line1, line2, line3, line4);
+        let file = create_test_file(&content);
+
+        let messages = parse_codex_file(file.path());
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].tokens.input, 80);
+        assert_eq!(messages[0].tokens.output, 30);
+        assert_eq!(messages[0].tokens.cache_read, 20);
+        assert_eq!(messages[0].tokens.reasoning, 5);
+        assert_eq!(messages[1].tokens.input, 8);
+        assert_eq!(messages[1].tokens.output, 3);
+        assert_eq!(messages[1].tokens.cache_read, 2);
+        assert_eq!(messages[1].tokens.reasoning, 1);
+    }
+
+    #[test]
+    fn test_token_count_ignores_negative_fallback_usage_in_baseline() {
+        let line1 = r#"{"timestamp":"2026-01-01T00:00:00Z","type":"turn_context","payload":{"model":"gpt-5.2"}}"#;
+        let line2 = r#"{"timestamp":"2026-01-01T00:00:01Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5},"last_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5}}}}"#;
+        let line3 = r#"{"timestamp":"2026-01-01T00:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":-10,"cached_input_tokens":-2,"output_tokens":-3,"reasoning_output_tokens":-1}}}}"#;
         let line4 = r#"{"timestamp":"2026-01-01T00:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":110,"cached_input_tokens":22,"output_tokens":33,"reasoning_output_tokens":6},"last_token_usage":{"input_tokens":10,"cached_input_tokens":2,"output_tokens":3,"reasoning_output_tokens":1}}}}"#;
         let content = format!("{}\n{}\n{}\n{}", line1, line2, line3, line4);
         let file = create_test_file(&content);
