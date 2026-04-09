@@ -563,6 +563,17 @@ enum CursorSubcommand {
 }
 
 fn main() -> Result<()> {
+    #[cfg(windows)]
+    {
+        let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
+        let handle = builder.spawn(|| run()).unwrap();
+        return handle.join().unwrap();
+    }
+    #[cfg(not(windows))]
+    run()
+}
+
+fn run() -> Result<()> {
     use std::io::IsTerminal;
 
     let cli = Cli::parse();
