@@ -438,6 +438,27 @@ pub(crate) fn merge_user_opencode_db_paths(discovered: &mut Vec<PathBuf>, extra_
     }
 }
 
+fn resolve_opencode_data_dir(home_dir: &str, use_env_roots: bool) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let _ = use_env_roots;
+        Path::new(home_dir)
+            .join(".local")
+            .join("share")
+            .join("opencode")
+    }
+
+    #[cfg(not(windows))]
+    {
+        let xdg_data = if use_env_roots {
+            std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", home_dir))
+        } else {
+            format!("{}/.local/share", home_dir)
+        };
+        PathBuf::from(xdg_data).join("opencode")
+    }
+}
+
 /// Scan all session client directories in parallel, with user-controlled
 /// [`ScannerSettings`] merged in.
 ///
@@ -525,12 +546,6 @@ fn scan_all_clients_with_env_strategy_inner(
     }
 
     if enabled.contains(&ClientId::OpenCode) {
-        let xdg_data = if use_env_roots {
-            std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| format!("{}/.local/share", home_dir))
-        } else {
-            format!("{}/.local/share", home_dir)
-        };
-
         // OpenCode 1.2+: SQLite database(s) at ~/.local/share/opencode/opencode*.db
         //
         // opencode picks its db filename at build time based on the release
@@ -540,7 +555,7 @@ fn scan_all_clients_with_env_strategy_inner(
         // under the data dir. See `getChannelPath` in
         // opencode/packages/opencode/src/storage/db.ts for the source of
         // the naming rule.
-        let opencode_data_dir = PathBuf::from(format!("{}/opencode", xdg_data));
+        let opencode_data_dir = resolve_opencode_data_dir(home_dir, use_env_roots);
         result.opencode_dbs = discover_opencode_dbs(&opencode_data_dir);
 
         // Merge user-configured `scanner.opencodeDbPaths` here, INSIDE the
@@ -557,13 +572,12 @@ fn scan_all_clients_with_env_strategy_inner(
         result.opencode_dbs.dedup();
 
         // OpenCode legacy: JSON files at ~/.local/share/opencode/storage/message/*/*.json
-        let opencode_path = ClientId::OpenCode
-            .data()
-            .resolve_path_with_env_strategy(home_dir, use_env_roots);
-        result.opencode_json_dir = Some(PathBuf::from(&opencode_path));
+        let opencode_path = opencode_data_dir.join("storage").join("message");
+        let opencode_path_string = opencode_path.to_string_lossy().into_owned();
+        result.opencode_json_dir = Some(opencode_path.clone());
         tasks.push((
             ClientId::OpenCode,
-            opencode_path,
+            opencode_path_string,
             ClientId::OpenCode.data().pattern,
         ));
     }
@@ -1164,6 +1178,35 @@ mod tests {
             false,
         );
         assert_eq!(result.get(ClientId::OpenCode).len(), 1);
+        assert_eq!(
+            result.opencode_json_dir,
+            Some(home.join(".local/share/opencode/storage/message"))
+        );
+
+        restore_env("XDG_DATA_HOME", previous_xdg);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[serial]
+    fn test_scan_all_clients_opencode_uses_home_default_data_dir_on_windows() {
+        let previous_xdg = std::env::var("XDG_DATA_HOME").ok();
+
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("target-home");
+        let conflicting_xdg = dir.path().join("conflicting-xdg");
+        setup_mock_opencode_dir(&home);
+        fs::create_dir_all(conflicting_xdg.join("opencode")).unwrap();
+        File::create(home.join(".local/share/opencode/opencode.db")).unwrap();
+
+        unsafe { std::env::set_var("XDG_DATA_HOME", &conflicting_xdg) };
+
+        let result = scan_all_clients(home.to_str().unwrap(), &["opencode".to_string()]);
+        assert_eq!(result.get(ClientId::OpenCode).len(), 1);
+        assert_eq!(
+            result.opencode_dbs,
+            vec![home.join(".local/share/opencode/opencode.db")]
+        );
         assert_eq!(
             result.opencode_json_dir,
             Some(home.join(".local/share/opencode/storage/message"))
