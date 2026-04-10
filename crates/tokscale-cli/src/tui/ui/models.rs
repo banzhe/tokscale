@@ -24,6 +24,8 @@ fn model_display_name(model: &crate::tui::data::ModelUsage, group_by: &GroupBy) 
     }
 }
 
+const MAX_MODEL_NAME_DISPLAY_CHARS: usize = 50;
+
 pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -163,12 +165,14 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
 
             let cells: Vec<Cell> = if is_very_narrow {
                 vec![
-                    Cell::from(truncate(&display_name, 15)).style(Style::default().fg(model_color)),
+                    Cell::from(truncate(&display_name, MAX_MODEL_NAME_DISPLAY_CHARS))
+                        .style(Style::default().fg(model_color)),
                     Cell::from(format_cost(model.cost)).style(Style::default().fg(Color::Green)),
                 ]
             } else if is_narrow {
                 vec![
-                    Cell::from(truncate(&display_name, 25)).style(Style::default().fg(model_color)),
+                    Cell::from(truncate(&display_name, MAX_MODEL_NAME_DISPLAY_CHARS))
+                        .style(Style::default().fg(model_color)),
                     Cell::from(format_tokens(model.tokens.total())),
                     Cell::from(format_cost(model.cost)).style(Style::default().fg(Color::Green)),
                 ]
@@ -180,7 +184,7 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
                             .fg(theme_accent)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Cell::from(truncate(&model.model, 24)).style(
+                    Cell::from(truncate(&model.model, MAX_MODEL_NAME_DISPLAY_CHARS)).style(
                         Style::default()
                             .fg(model_color)
                             .add_modifier(Modifier::BOLD),
@@ -202,7 +206,7 @@ pub fn render(frame: &mut Frame, app: &mut App, area: Rect) {
             } else {
                 vec![
                     Cell::from(format!("{}", idx + 1)).style(Style::default().fg(theme_muted)),
-                    Cell::from(truncate(&model.model, 30)).style(
+                    Cell::from(truncate(&model.model, MAX_MODEL_NAME_DISPLAY_CHARS)).style(
                         Style::default()
                             .fg(model_color)
                             .add_modifier(Modifier::BOLD),
